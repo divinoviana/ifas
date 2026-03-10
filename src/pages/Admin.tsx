@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FileText, Users, Settings, Download, RefreshCw, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { Upload, FileText, Users, Settings, Download, RefreshCw, CheckCircle2, AlertCircle, XCircle, LogOut, Lock } from 'lucide-react';
 
 interface IFA {
   id: number;
@@ -25,6 +25,11 @@ interface Enrollment {
 }
 
 export default function Admin() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('adminToken'));
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'ifas' | 'enrollments'>('ifas');
   const [ifas, setIfas] = useState<IFA[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -34,10 +39,42 @@ export default function Admin() {
   const [success, setSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoginLoading(true);
+      setError('');
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao fazer login');
+      setToken(data.token);
+      localStorage.setItem('adminToken', data.token);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    localStorage.removeItem('adminToken');
+    setIfas([]);
+    setEnrollments([]);
+  };
+
   const fetchIfas = async () => {
+    if (!token) return;
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/ifas');
+      const res = await fetch('/api/admin/ifas', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) return handleLogout();
       const data = await res.json();
       setIfas(data);
     } catch (err: any) {
@@ -48,9 +85,13 @@ export default function Admin() {
   };
 
   const fetchEnrollments = async () => {
+    if (!token) return;
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/enrollments');
+      const res = await fetch('/api/admin/enrollments', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) return handleLogout();
       const data = await res.json();
       setEnrollments(data);
     } catch (err: any) {
@@ -61,13 +102,15 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    if (activeTab === 'ifas') fetchIfas();
-    else fetchEnrollments();
-  }, [activeTab]);
+    if (token) {
+      if (activeTab === 'ifas') fetchIfas();
+      else fetchEnrollments();
+    }
+  }, [activeTab, token]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !token) return;
 
     const formData = new FormData();
     formData.append('pdf', file);
@@ -79,9 +122,11 @@ export default function Admin() {
       
       const res = await fetch('/api/admin/upload-pdf', {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
       
+      if (res.status === 401) return handleLogout();
       const data = await res.json();
       
       if (!res.ok) throw new Error(data.error || 'Erro ao processar PDF');
@@ -97,8 +142,13 @@ export default function Admin() {
   };
 
   const toggleIfaStatus = async (id: number) => {
+    if (!token) return;
     try {
-      const res = await fetch(`/api/admin/ifas/${id}/toggle`, { method: 'POST' });
+      const res = await fetch(`/api/admin/ifas/${id}/toggle`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) return handleLogout();
       if (res.ok) {
         fetchIfas();
       }
@@ -128,6 +178,63 @@ export default function Admin() {
     link.click();
     document.body.removeChild(link);
   };
+
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+          <div>
+            <div className="mx-auto h-12 w-12 bg-indigo-100 rounded-full flex items-center justify-center">
+              <Lock className="h-6 w-6 text-indigo-600" />
+            </div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900">
+              Acesso Administrativo
+            </h2>
+          </div>
+          <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-start">
+                <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            )}
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 rounded-t-xl focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                  placeholder="E-mail"
+                />
+              </div>
+              <div>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-3 border border-slate-300 placeholder-slate-500 text-slate-900 rounded-b-xl focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                  placeholder="Senha"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              >
+                {loginLoading ? 'Entrando...' : 'Entrar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -163,6 +270,15 @@ export default function Admin() {
                   Inscritos
                 </button>
               </div>
+            </div>
+            <div className="flex items-center">
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                <LogOut className="h-4 w-4 mr-1" />
+                Sair
+              </button>
             </div>
           </div>
         </div>

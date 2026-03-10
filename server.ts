@@ -30,6 +30,31 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // API Routes
 
+// Admin: Login
+app.post('/api/admin/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    res.json({ success: true, token: data.session.access_token });
+  } catch (error: any) {
+    res.status(401).json({ error: 'Credenciais inválidas.' });
+  }
+});
+
+// Helper to get authenticated supabase client
+const getAuthClient = (req: express.Request) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return supabase;
+  return createClient(supabaseUrl, supabaseKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+};
+
 // Get IFAs for a specific turma's series
 app.get('/api/ifas', async (req, res) => {
   const { turma } = req.query;
@@ -125,7 +150,8 @@ app.post('/api/enroll', async (req, res) => {
 // Admin: Get all IFAs with stats
 app.get('/api/admin/ifas', async (req, res) => {
   try {
-    const { data: ifas, error } = await supabase.from('ifas').select('*, inscricoes(count)').order('turma', { ascending: true });
+    const client = getAuthClient(req);
+    const { data: ifas, error } = await client.from('ifas').select('*, inscricoes(count)').order('turma', { ascending: true });
     if (error) throw error;
 
     const formattedIfas = ifas.map(ifa => ({
@@ -142,7 +168,8 @@ app.get('/api/admin/ifas', async (req, res) => {
 // Admin: Get all enrollments
 app.get('/api/admin/enrollments', async (req, res) => {
   try {
-    const { data: enrollments, error } = await supabase
+    const client = getAuthClient(req);
+    const { data: enrollments, error } = await client
       .from('inscricoes')
       .select(`
         id,
@@ -174,11 +201,12 @@ app.get('/api/admin/enrollments', async (req, res) => {
 app.post('/api/admin/ifas/:id/toggle', async (req, res) => {
   const { id } = req.params;
   try {
-    const { data: ifa, error: fetchError } = await supabase.from('ifas').select('is_open').eq('id', id).single();
+    const client = getAuthClient(req);
+    const { data: ifa, error: fetchError } = await client.from('ifas').select('is_open').eq('id', id).single();
     if (fetchError || !ifa) return res.status(404).json({ error: 'IFA não encontrado.' });
     
     const newStatus = !ifa.is_open;
-    const { error: updateError } = await supabase.from('ifas').update({ is_open: newStatus }).eq('id', id);
+    const { error: updateError } = await client.from('ifas').update({ is_open: newStatus }).eq('id', id);
     if (updateError) throw updateError;
 
     res.json({ success: true, is_open: newStatus });
@@ -250,6 +278,7 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
     const parsedIfas = JSON.parse(response.text || '[]');
 
     // Insert into database
+    const client = getAuthClient(req);
     const ifasToInsert = parsedIfas.map((ifa: any) => ({
       turma: ifa.turma.replace(/\D/g, ''),
       tipo_ifa: ifa.projeto_1.toLowerCase().includes('humanas') || ifa.projeto_1.toLowerCase().includes('linguagem') ? 'Tipo 1' : 'Tipo 2',
@@ -260,7 +289,7 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
       vagas_maximas: 40
     }));
 
-    const { error: insertError } = await supabase.from('ifas').insert(ifasToInsert);
+    const { error: insertError } = await client.from('ifas').insert(ifasToInsert);
     if (insertError) throw insertError;
 
     res.json({ success: true, message: `${parsedIfas.length} IFAs importados com sucesso.`, data: parsedIfas });
