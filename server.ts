@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 // @ts-expect-error pdf-parse types are weird
 import * as pdfParseModule from 'pdf-parse';
@@ -7,7 +6,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 
@@ -23,7 +27,7 @@ const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_-3vxCmHWNtm7zDqa
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Multer setup for PDF upload
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: os.tmpdir() });
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -303,6 +307,7 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
 // Vite middleware for development
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -320,4 +325,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

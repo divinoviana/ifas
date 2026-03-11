@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, User, GraduationCap, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BookOpen, User, GraduationCap, CheckCircle2, AlertCircle, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface IFA {
   id: number;
@@ -78,7 +79,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 relative">
+      <Link 
+        to="/admin" 
+        className="absolute top-4 right-4 inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        <Settings className="h-4 w-4 mr-2" />
+        Acesso Restrito
+      </Link>
+
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <GraduationCap className="mx-auto h-16 w-16 text-indigo-600" />
