@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 // Using the anon key is failing due to RLS. I'll need to use the service role key if available, or instruct the user to disable RLS/add a policy.
 // Since I don't have the service role key, I will output the SQL for the user to run.
 
+const supabaseUrl = process.env.SUPABASE_URL || 'https://yikojuwgfdrfpezcnufu.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_-3vxCmHWNtm7zDqaPm0m8Q_TjkGaeFo';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const ifas = [
   {

@@ -1,12 +1,22 @@
-import appModule from '../server';
+let app: any;
+let initError: any;
 
-const app = (appModule as any).default || appModule;
+try {
+  const appModule = await import('../server');
+  app = appModule.default || appModule;
+} catch (error: any) {
+  console.error('Vercel handler initialization error:', error);
+  initError = error;
+}
 
 export default function handler(req: any, res: any) {
-  try {
-    return app(req, res);
-  } catch (error: any) {
-    console.error('Vercel handler error:', error);
-    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  if (initError) {
+    return res.status(500).json({ 
+      error: 'Internal Server Error', 
+      message: 'Failed to initialize server',
+      details: initError.message,
+      stack: initError.stack
+    });
   }
+  return app(req, res);
 }

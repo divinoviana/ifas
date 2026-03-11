@@ -249,7 +249,7 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
 
   try {
     const pdfParseModule = await import('pdf-parse');
-    const pdfParse = pdfParseModule.default || pdfParseModule;
+    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
     const dataBuffer = fs.readFileSync(req.file.path);
     const data = await pdfParse(dataBuffer);
     const text = data.text;
