@@ -1,13 +1,12 @@
 import express from 'express';
 import multer from 'multer';
-// @ts-expect-error pdf-parse types are weird
-import * as pdfParseModule from 'pdf-parse';
 import { GoogleGenAI, Type } from '@google/genai';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { createClient } from '@supabase/supabase-js';
+import * as pdfParseModule from 'pdf-parse';
 
 const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 
