@@ -7,11 +7,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 
@@ -22,15 +18,40 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize Supabase
-const supabaseUrl = process.env.SUPABASE_URL || 'https://yikojuwgfdrfpezcnufu.supabase.co';
+let supabaseUrl = process.env.SUPABASE_URL || 'https://yikojuwgfdrfpezcnufu.supabase.co';
 const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_-3vxCmHWNtm7zDqaPm0m8Q_TjkGaeFo';
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+if (supabaseUrl && !supabaseUrl.startsWith('http')) {
+  supabaseUrl = `https://${supabaseUrl}`;
+}
+
+let supabase: any;
+try {
+  supabase = createClient(supabaseUrl, supabaseKey);
+} catch (e) {
+  console.error('Failed to initialize Supabase client:', e);
+  // Create a dummy client to prevent crash, API calls will fail gracefully
+  supabase = {
+    from: () => ({ select: () => ({ eq: () => ({ single: () => ({ data: null, error: e }) }) }) }),
+    auth: { signInWithPassword: () => ({ data: null, error: e }) }
+  };
+}
 
 // Multer setup for PDF upload
 const upload = multer({ dest: os.tmpdir() });
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini lazily
+let ai: GoogleGenAI | null = null;
+const getAi = () => {
+  if (!ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY is not set in environment variables.');
+    }
+    ai = new GoogleGenAI({ apiKey });
+  }
+  return ai;
+};
 
 // API Routes
 
@@ -50,13 +71,18 @@ app.post('/api/admin/login', async (req, res) => {
 const getAuthClient = (req: express.Request) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return supabase;
-  return createClient(supabaseUrl, supabaseKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`
+  try {
+    return createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
-    }
-  });
+    });
+  } catch (e) {
+    console.error('Failed to initialize authenticated Supabase client:', e);
+    return supabase;
+  }
 };
 
 // Get IFAs for a specific turma's series
@@ -257,7 +283,8 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
       ${text}
     `;
 
-    const response = await ai.models.generateContent({
+    const aiClient = getAi();
+    const response = await aiClient.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
@@ -307,16 +334,17 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
 // Vite middleware for development
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+    const viteModule = 'vite';
+    const { createServer: createViteServer } = await import(viteModule);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static('dist'));
+    app.use(express.static(path.join(process.cwd(), 'dist')));
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
     });
   }
 
