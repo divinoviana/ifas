@@ -6,9 +6,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { createClient } from '@supabase/supabase-js';
-import * as pdfParseModule from 'pdf-parse';
-
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 
 const app = express();
 const PORT = 3000;
@@ -251,6 +248,8 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
   }
 
   try {
+    const pdfParseModule = await import('pdf-parse');
+    const pdfParse = pdfParseModule.default || pdfParseModule;
     const dataBuffer = fs.readFileSync(req.file.path);
     const data = await pdfParse(dataBuffer);
     const text = data.text;
@@ -329,6 +328,11 @@ app.post('/api/admin/upload-pdf', upload.single('pdf'), async (req, res) => {
   }
 });
 
+// Global error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Express global error:', err);
+  res.status(500).json({ error: 'Internal Server Error', details: err.message });
+});
 
 // Vite middleware for development
 async function startServer() {
